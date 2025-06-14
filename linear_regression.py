@@ -4,8 +4,20 @@ import csv
 import sys
 import os
 import matplotlib.pyplot as plt
+from rich.console import Console
+from rich.prompt import Prompt, FloatPrompt
+from rich.panel import Panel
+from rich.markdown import Markdown
+
+console = Console()
+
 
 def load_data(path, header=True):
+    """
+    Carga datos de regresión lineal desde CSV.
+    Asume última columna como target, resto features.
+    Agrega bias=1.0 en X.
+    """
     X, y = [], []
     with open(path) as f:
         reader = csv.reader(f)
@@ -21,7 +33,7 @@ def load_data(path, header=True):
                 X.append([1.0] + x_vals)
                 y.append(y_val)
             except ValueError:
-                print(f"Fila inválida (omitida): {row}")
+                console.print(f"[yellow]Fila inválida (omitida):[/] {row}")
     return X, y
 
 
@@ -83,7 +95,7 @@ def plot_regression(X, y, w, x_new=None, y_new=None):
     y_line = [predict(w, [1, x]) for x in x_line]
     plt.plot(x_line, y_line, 'r--', label='Regresión')
     if x_new is not None and y_new is not None:
-        plt.scatter([x_new], [y_new], marker='s', color='green', s=100, label=f'Predicción')
+        plt.scatter([x_new], [y_new], marker='s', color='green', s=100, label='Predicción')
     plt.title('Regresión Lineal')
     plt.xlabel('x')
     plt.ylabel('y')
@@ -93,47 +105,54 @@ def plot_regression(X, y, w, x_new=None, y_new=None):
 
 
 def main():
-    print("--- Regresión Lineal Interactiva ---")
-    path = input("Ruta al archivo CSV: ").strip()
-    if not os.path.exists(path):
-        print("No se encontró el archivo.")
-        sys.exit(1)
+    console.rule("[bold cyan]Regresión lineal[/bold cyan]")
+    raw = Prompt.ask("📂 Ruta al archivo CSV (o nombre dentro de 'data')").strip()
+    if os.path.exists(raw):
+        path = raw
+    else:
+        default = os.path.join('data', raw)
+        if os.path.exists(default):
+            path = default
+        else:
+            console.print(f"[red]Archivo no encontrado ni en '{raw}' ni en '{default}'[/red]")
+            sys.exit(1)
 
     try:
         X, y = load_data(path)
     except Exception as e:
-        print(f"Error cargando datos: {e}")
+        console.print(f"[red]Error cargando datos:[/] {e}")
         sys.exit(1)
 
-    n_features = len(X[0]) - 1
-    lam_input = input("¿Usar regularización? Ingrese lambda (0 para ninguna): ").strip()
-    lam = float(lam_input) if lam_input else 0.0
+    n_feat = len(X[0]) - 1
+    lam = FloatPrompt.ask("🔒 Lambda de regularización (0=ninguna)", default=0.0)
 
     w = fit_linear_regression(X, y, lam)
-    print("\n===== RESULTADOS =====")
-    print("Coeficientes (bias primero):", [f"{wi:.4f}" for wi in w])
+    console.print(Panel.fit(
+        f"💡 Coeficientes (bias primero): [bold]{[f'{wi:.4f}' for wi in w]}[/]",
+        title="Resultados", border_style="green"
+    ))
 
-    pred_choice = input("¿Deseás predecir un nuevo punto? (s/n): ").strip().lower()
-    if pred_choice.startswith('s'):
-        entrada = input(f"Ingresá {n_features} valores separados por coma: ").strip()
+    if Prompt.ask("¿Deseas predecir un nuevo punto?", choices=["s","n"], default="n") == "s":
+        entrada = Prompt.ask(f"✏️ Ingresa {n_feat} valores separados por coma").strip()
         try:
             vals = [float(v) for v in entrada.split(',')]
-            if len(vals) != n_features:
+            if len(vals) != n_feat:
                 raise ValueError
             x_vec = [1.0] + vals
             y_pred = predict(w, x_vec)
-            print("===== RESULTADOS =====")
-            print(f"Predicción para {vals}: y={y_pred:.4f}")
+            console.print(Panel.fit(
+                f"➡️ Predicción para {vals}: [bold]{y_pred:.4f}[/]",
+                title="Predicción", border_style="cyan"
+            ))
         except:
-            print("Entrada inválida.")
+            console.print("[red]Entrada inválida.[/red]")
     else:
         x_vec, y_pred = None, None
 
-    if n_features == 1:
+    if n_feat == 1:
         plot_regression(X, y, w, x_vec[1] if x_vec else None, y_pred)
     else:
-        print("Atención: no se grafica porque hay múltiples características.")
-
+        console.print(f"[yellow]Atención:[/] no se grafica porque hay {n_feat} características.")
 
 if __name__ == '__main__':
     main()
